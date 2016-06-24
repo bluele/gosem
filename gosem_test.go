@@ -57,4 +57,13 @@ func TestTimeoutSemaphore(t *testing.T) {
 	if err := sem.AquireWithTimeout(time.Millisecond); err == nil {
 		t.Error("sem.AquireWithTimeout(time.Millisecond) should return error")
 	}
+
+	sem.Destroy()
+	// After destroy semaphore, you can release the resources, but cannot aquire new resources.
+	for i := 0; i < permits; i++ {
+		sem.Release()
+	}
+	if err := sem.AquireWithTimeout(time.Millisecond); err == nil {
+		t.Error("sem.AquireWithTimeout(time.Millisecond) should return error")
+	}
 }

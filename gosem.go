@@ -20,6 +20,8 @@ type TimeoutSemaphore struct {
 	channel chan byte
 	buffer  chan byte
 	per     time.Duration
+
+	destroy chan byte
 }
 
 func NewSemaphore(permits int) *Semaphore {
@@ -103,8 +105,20 @@ func (sm *TimeoutSemaphore) Available() int {
 	return len(sm.channel)
 }
 
+// Destroy close each channels and stop observing resources on channels
+func (sm *TimeoutSemaphore) Destroy() {
+	select {
+	case sm.destroy <- resource:
+		close(sm.channel)
+		close(sm.buffer)
+	default:
+		return
+	}
+}
+
 func (sm *TimeoutSemaphore) gc() {
 	tick := time.NewTicker(sm.per)
+	defer tick.Stop()
 	for {
 	Main:
 		select {
@@ -117,7 +131,9 @@ func (sm *TimeoutSemaphore) gc() {
 					break Main
 				}
 			}
-
+		case <-sm.destroy:
+			close(sm.destroy)
+			return
 		}
 	}
 }
