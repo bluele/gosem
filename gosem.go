@@ -41,6 +41,7 @@ func NewTimeoutSemaphore(permits int, per time.Duration) *TimeoutSemaphore {
 		per:     per,
 		channel: make(chan byte, permits),
 		buffer:  make(chan byte, permits),
+		destroy: make(chan byte, 1),
 	}
 	for i := 0; i < permits; i++ {
 		sm.channel <- resource
@@ -49,6 +50,7 @@ func NewTimeoutSemaphore(permits int, per time.Duration) *TimeoutSemaphore {
 	return sm
 }
 
+// Aquire gets a new resource from buffer
 func (sm *Semaphore) Aquire() error {
 	<-sm.channel
 	return nil
@@ -64,6 +66,7 @@ func (sm *Semaphore) AquireWithTimeout(timeout time.Duration) error {
 	}
 }
 
+// Release gives a new resource to buffer
 func (sm *Semaphore) Release() error {
 	select {
 	case sm.channel <- resource:
@@ -73,15 +76,18 @@ func (sm *Semaphore) Release() error {
 	return nil
 }
 
+// Available gets the number of available resource
 func (sm *Semaphore) Available() int {
 	return len(sm.channel)
 }
 
+// Aquire gets a new resource from buffer
 func (sm *TimeoutSemaphore) Aquire() error {
 	<-sm.channel
 	return nil
 }
 
+// AquireWithTimeout gets a new resource from buffer, but this operation will be timeout after specified time
 func (sm *TimeoutSemaphore) AquireWithTimeout(timeout time.Duration) error {
 	ch := time.After(timeout)
 	select {
@@ -92,6 +98,7 @@ func (sm *TimeoutSemaphore) AquireWithTimeout(timeout time.Duration) error {
 	}
 }
 
+// Release gives a new resource to buffer
 func (sm *TimeoutSemaphore) Release() error {
 	select {
 	case sm.buffer <- resource:
@@ -101,18 +108,19 @@ func (sm *TimeoutSemaphore) Release() error {
 	return nil
 }
 
+// Available gets the number of available resource
 func (sm *TimeoutSemaphore) Available() int {
 	return len(sm.channel)
 }
 
-// Destroy close each channels and stop observing resources on channels
-func (sm *TimeoutSemaphore) Destroy() {
+// Destroy stops observing resources on channels
+// After call this method, this semaphore object wouldn't be controllable.
+func (sm *TimeoutSemaphore) Destroy() bool {
 	select {
 	case sm.destroy <- resource:
-		close(sm.channel)
-		close(sm.buffer)
+		return true
 	default:
-		return
+		return false
 	}
 }
 
