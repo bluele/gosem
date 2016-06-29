@@ -6,4 +6,4 @@ dependencies:
 
 test:
   override:
-    - make test
+    - go test -v
