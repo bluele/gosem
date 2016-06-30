@@ -1,0 +1,11 @@
+dependencies:
+  cache_directories:
+    - redis-2.8.24
+  pre:
+    - if [[ ! -e redis-2.8.24/src/redis-server ]]; then wget http://download.redis.io/releases/redis-2.8.24.tar.gz && tar xzf redis-2.8.24.tar.gz && cd redis-2.8.24 && make; fi
+
+test:
+  override:
+    - go test -v
+    - go get github.com/mattn/goveralls
+    - goveralls -v -service=circle-ci -repotoken $COVERALLS_TOKEN .
