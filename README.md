@@ -1,5 +1,7 @@
 # gosem
 
+[![CircleCI](https://circleci.com/gh/bluele/gosem/tree/master.svg?style=svg)](https://circleci.com/gh/bluele/gosem/tree/master)
+
 gosem provides multiple semaphore functions.
 Currently supports inmemory, redis implementation.
 
