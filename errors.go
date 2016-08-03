@@ -5,6 +5,5 @@ import (
 )
 
 var (
-	TimeoutError        = errors.New("Timeout error")
-	TooManyReleaseError = errors.New("Too many release resources")
+	TimeoutError = errors.New("Timeout error")
 )
