@@ -70,8 +70,6 @@ func (sm *Semaphore) AquireWithTimeout(timeout time.Duration) error {
 func (sm *Semaphore) Release() error {
 	select {
 	case sm.channel <- resource:
-	default:
-		return TooManyReleaseError
 	}
 	return nil
 }
@@ -103,7 +101,6 @@ func (sm *TimeoutSemaphore) Release() error {
 	select {
 	case sm.buffer <- resource:
 	default:
-		return TooManyReleaseError
 	}
 	return nil
 }
@@ -125,18 +122,29 @@ func (sm *TimeoutSemaphore) Destroy() bool {
 }
 
 func (sm *TimeoutSemaphore) gc() {
-	tick := time.NewTicker(sm.per)
-	defer tick.Stop()
 	for {
 	Main:
 		select {
-		case <-tick.C:
-			for {
+		case b := <-sm.buffer:
+			select {
+			case <-time.After(sm.per):
 				select {
-				case b := <-sm.buffer:
-					sm.channel <- b
+				case sm.channel <- b:
 				default:
 					break Main
+				}
+
+				for {
+					select {
+					case b = <-sm.buffer:
+						select {
+						case sm.channel <- b:
+						default:
+							break Main
+						}
+					default:
+						break Main
+					}
 				}
 			}
 		case <-sm.destroy:
