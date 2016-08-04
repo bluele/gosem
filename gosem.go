@@ -123,32 +123,33 @@ func (sm *TimeoutSemaphore) Destroy() bool {
 
 func (sm *TimeoutSemaphore) gc() {
 	for {
-	Main:
 		select {
 		case b := <-sm.buffer:
-			select {
-			case <-time.After(sm.per):
-				select {
-				case sm.channel <- b:
-				default:
-					break Main
-				}
-
-				for {
-					select {
-					case b = <-sm.buffer:
-						select {
-						case sm.channel <- b:
-						default:
-							break Main
-						}
-					default:
-						break Main
-					}
-				}
-			}
+			<-time.After(sm.per)
+			sm.flushBuffer(b)
 		case <-sm.destroy:
 			close(sm.destroy)
+			return
+		}
+	}
+}
+
+func (sm *TimeoutSemaphore) flushBuffer(b byte) {
+	select {
+	case sm.channel <- b:
+	default:
+		return
+	}
+
+	for {
+		select {
+		case b = <-sm.buffer:
+			select {
+			case sm.channel <- b:
+			default:
+				return
+			}
+		default:
 			return
 		}
 	}
