@@ -122,7 +122,7 @@ func (sm *RedisSemaphore) Release() error {
 		return err
 	}
 	if !ok {
-		return TooManyReleaseError
+		return nil
 	}
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
