@@ -27,18 +27,20 @@ func main() {
 
 ## Memory-based semaphore
 
-It can be used between processes that are on the same process.
+### Simple semaphore
 
-### Counting semaphore
+Semaphore is a semaphore that can be used to coordinate the number of accessing shared data from multiple goroutine.
 
 ```go
 sem := gosem.NewSemaphore(5)
 ```
 
-### Timeout semaphore
+### Time semaphore
+
+TimeSemaphore is a semaphore that can be used to coordinate the number of accessing shared data from multiple goroutine with specified time.
 
 ```go
-sem := gosem.NewTimeoutSemaphore(5)
+sem := gosem.NewTimeSemaphore(5, time.Second)
 ```
 
 ## Redis-based semaphore

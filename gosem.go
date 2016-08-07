@@ -1,6 +1,9 @@
 package gosem
 
 import (
+	"container/list"
+	"log"
+	"sync"
 	"time"
 )
 
@@ -8,22 +11,28 @@ const (
 	resource byte = 0
 )
 
+// Semaphore is a simple semaphore that can be used to coordinate the number of accessing shared data from multiple goroutine.
 type Semaphore struct {
 	Permits int
 
 	channel chan byte
 }
 
-type TimeoutSemaphore struct {
+// TimeSemaphore is a semaphore that can be used to coordinate the number of accessing shared data from multiple goroutine with specified time.
+type TimeSemaphore struct {
 	Permits int
+	Logger  *log.Logger
 
-	channel chan byte
-	buffer  chan byte
-	per     time.Duration
+	mu        sync.RWMutex
+	channel   chan byte
+	tokenList *list.List
+	buffer    chan *list.Element
+	per       time.Duration
 
 	destroy chan byte
 }
 
+// NewSemaphore returns a new Semaphore object
 func NewSemaphore(permits int) *Semaphore {
 	sm := &Semaphore{
 		Permits: permits,
@@ -35,27 +44,38 @@ func NewSemaphore(permits int) *Semaphore {
 	return sm
 }
 
-func NewTimeoutSemaphore(permits int, per time.Duration) *TimeoutSemaphore {
-	sm := &TimeoutSemaphore{
-		Permits: permits,
-		per:     per,
-		channel: make(chan byte, permits),
-		buffer:  make(chan byte, permits),
-		destroy: make(chan byte, 1),
-	}
-	for i := 0; i < permits; i++ {
-		sm.channel <- resource
+// NewTimeSemaphore returns a new TimeSemaphore object
+func NewTimeSemaphore(permits int, per time.Duration) *TimeSemaphore {
+	sm := &TimeSemaphore{
+		Permits:   permits,
+		per:       per,
+		channel:   make(chan byte, permits),
+		tokenList: list.New(),
+		buffer:    make(chan *list.Element, permits),
+		destroy:   make(chan byte, 1),
 	}
 	go sm.gc()
 	return sm
 }
 
-// Aquire gets a new resource from buffer
+type token struct {
+	aquiredAt *time.Time
+}
+
+func newToken() *token {
+	t := time.Now()
+	return &token{
+		aquiredAt: &t,
+	}
+}
+
+// Aquire gets a new resource
 func (sm *Semaphore) Aquire() error {
 	<-sm.channel
 	return nil
 }
 
+// AquireWithTimeout try to get a new resource, but this operation will be timeout after specified time.
 func (sm *Semaphore) AquireWithTimeout(timeout time.Duration) error {
 	ch := time.After(timeout)
 	select {
@@ -66,56 +86,78 @@ func (sm *Semaphore) AquireWithTimeout(timeout time.Duration) error {
 	}
 }
 
-// Release gives a new resource to buffer
+// Release gives the resource
 func (sm *Semaphore) Release() error {
 	select {
 	case sm.channel <- resource:
-	default:
-		return TooManyReleaseError
 	}
 	return nil
 }
 
-// Available gets the number of available resource
+// Available gets the number of available resources
 func (sm *Semaphore) Available() int {
 	return len(sm.channel)
 }
 
-// Aquire gets a new resource from buffer
-func (sm *TimeoutSemaphore) Aquire() error {
-	<-sm.channel
+// Aquire gets a new resource
+func (sm *TimeSemaphore) Aquire() error {
+	sm.channel <- resource
+	sm.mu.Lock()
+	sm.pushToken(newToken())
+	sm.mu.Unlock()
 	return nil
 }
 
-// AquireWithTimeout gets a new resource from buffer, but this operation will be timeout after specified time
-func (sm *TimeoutSemaphore) AquireWithTimeout(timeout time.Duration) error {
+// AquireWithTimeout try to get a new resource, but this operation will be timeout after specified time.
+func (sm *TimeSemaphore) AquireWithTimeout(timeout time.Duration) error {
 	ch := time.After(timeout)
+
 	select {
-	case <-sm.channel:
+	case sm.channel <- resource:
+		sm.mu.Lock()
+		sm.pushToken(newToken())
+		sm.mu.Unlock()
 		return nil
 	case <-ch:
 		return TimeoutError
 	}
 }
 
-// Release gives a new resource to buffer
-func (sm *TimeoutSemaphore) Release() error {
-	select {
-	case sm.buffer <- resource:
-	default:
-		return TooManyReleaseError
+func (sm *TimeSemaphore) pushToken(tk *token) *list.Element {
+	return sm.tokenList.PushBack(tk)
+}
+
+// returns: token, true if exists
+func (sm *TimeSemaphore) getCurrentToken() (*list.Element, bool) {
+	elt := sm.tokenList.Front()
+	if elt == nil {
+		return nil, false
+	}
+	return elt, true
+}
+
+// Release gives the resource
+func (sm *TimeSemaphore) Release() error {
+	sm.mu.Lock()
+	elt, ok := sm.getCurrentToken()
+	if ok {
+		sm.tokenList.Remove(elt)
+	}
+	sm.mu.Unlock()
+	if ok {
+		sm.buffer <- elt
 	}
 	return nil
 }
 
 // Available gets the number of available resource
-func (sm *TimeoutSemaphore) Available() int {
-	return len(sm.channel)
+func (sm *TimeSemaphore) Available() int {
+	return sm.Permits - len(sm.channel)
 }
 
-// Destroy stops observing resources on channels
+// Destroy stops observing resources of channels.
 // After call this method, this semaphore object wouldn't be controllable.
-func (sm *TimeoutSemaphore) Destroy() bool {
+func (sm *TimeSemaphore) Destroy() bool {
 	select {
 	case sm.destroy <- resource:
 		return true
@@ -124,24 +166,34 @@ func (sm *TimeoutSemaphore) Destroy() bool {
 	}
 }
 
-func (sm *TimeoutSemaphore) gc() {
-	tick := time.NewTicker(sm.per)
-	defer tick.Stop()
+func (sm *TimeSemaphore) gc() {
 	for {
-	Main:
 		select {
-		case <-tick.C:
-			for {
-				select {
-				case b := <-sm.buffer:
-					sm.channel <- b
-				default:
-					break Main
-				}
+		case elt := <-sm.buffer:
+			tk := elt.Value.(*token)
+			sub := time.Now().Sub(*tk.aquiredAt)
+			if sub <= sm.per {
+				sm.logf("gc() waits(%v)\n", sm.per-sub)
+				<-time.After(sm.per - sub)
+			} else {
+				sm.logf("gc() nowait(%v)\n", sm.per-sub)
 			}
+			<-sm.channel
+			sm.log("gc() release channel")
 		case <-sm.destroy:
-			close(sm.destroy)
 			return
 		}
+	}
+}
+
+func (sm *TimeSemaphore) log(v ...interface{}) {
+	if sm.Logger != nil {
+		sm.Logger.Println(v...)
+	}
+}
+
+func (sm *TimeSemaphore) logf(format string, v ...interface{}) {
+	if sm.Logger != nil {
+		sm.Logger.Printf(format, v...)
 	}
 }
