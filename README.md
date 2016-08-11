@@ -14,11 +14,11 @@ var sem = gosem.NewSemaphore(3)
 func main() {
   for _, task := range tasks {
     // Do task if available resources exists.
-    sem.Aquire(1)
-    go func() {
+    sem.Acquire()
+    go func(task Task) {
       defer sem.Release()
       do(task)
-    }()
+    }(task)
   }
 }
 ```
@@ -33,6 +33,10 @@ Semaphore is a semaphore that can be used to coordinate the number of accessing 
 
 ```go
 sem := gosem.NewSemaphore(5)
+// acquire a new resource
+sem.Acquire()
+// release the resource
+sem.Release()
 ```
 
 ### Time semaphore
@@ -41,6 +45,10 @@ TimeSemaphore is a semaphore that can be used to coordinate the number of access
 
 ```go
 sem := gosem.NewTimeSemaphore(5, time.Second)
+// acquire a new resource
+sem.Acquire()
+// release the resource
+sem.Release()
 ```
 
 ## Redis-based semaphore

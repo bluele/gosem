@@ -59,24 +59,24 @@ func NewTimeSemaphore(permits int, per time.Duration) *TimeSemaphore {
 }
 
 type token struct {
-	aquiredAt *time.Time
+	acquiredAt *time.Time
 }
 
 func newToken() *token {
 	t := time.Now()
 	return &token{
-		aquiredAt: &t,
+		acquiredAt: &t,
 	}
 }
 
-// Aquire gets a new resource
-func (sm *Semaphore) Aquire() error {
+// Acquire gets a new resource
+func (sm *Semaphore) Acquire() error {
 	<-sm.channel
 	return nil
 }
 
-// AquireWithTimeout try to get a new resource, but this operation will be timeout after specified time.
-func (sm *Semaphore) AquireWithTimeout(timeout time.Duration) error {
+// AcquireWithTimeout try to get a new resource, but this operation will be timeout after specified time.
+func (sm *Semaphore) AcquireWithTimeout(timeout time.Duration) error {
 	ch := time.After(timeout)
 	select {
 	case <-sm.channel:
@@ -99,8 +99,8 @@ func (sm *Semaphore) Available() int {
 	return len(sm.channel)
 }
 
-// Aquire gets a new resource
-func (sm *TimeSemaphore) Aquire() error {
+// Acquire gets a new resource
+func (sm *TimeSemaphore) Acquire() error {
 	sm.channel <- resource
 	sm.mu.Lock()
 	sm.pushToken(newToken())
@@ -108,8 +108,8 @@ func (sm *TimeSemaphore) Aquire() error {
 	return nil
 }
 
-// AquireWithTimeout try to get a new resource, but this operation will be timeout after specified time.
-func (sm *TimeSemaphore) AquireWithTimeout(timeout time.Duration) error {
+// AcquireWithTimeout try to get a new resource, but this operation will be timeout after specified time.
+func (sm *TimeSemaphore) AcquireWithTimeout(timeout time.Duration) error {
 	ch := time.After(timeout)
 
 	select {
@@ -171,7 +171,7 @@ func (sm *TimeSemaphore) gc() {
 		select {
 		case elt := <-sm.buffer:
 			tk := elt.Value.(*token)
-			sub := time.Now().Sub(*tk.aquiredAt)
+			sub := time.Now().Sub(*tk.acquiredAt)
 			if sub <= sm.per {
 				sm.logf("gc() waits(%v)\n", sm.per-sub)
 				<-time.After(sm.per - sub)
