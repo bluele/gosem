@@ -1,47 +1,45 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"github.com/bluele/gosem"
 )
 
-func task(i int) {
-	time.Sleep(time.Millisecond)
-	fmt.Printf("done: task-%v\n", i)
-}
-
-func getMainCh() chan byte {
-	ch := make(chan byte)
+func task(workerNumber, permit int) chan struct{} {
+	ch := make(chan struct{})
 	go func() {
-		taskNumber := 20
-		permit := 6
-		sem := gosem.NewTimeoutSemaphore(permit, time.Second)
-
-		for i := 0; i < taskNumber; i++ {
-			sem.Aquire(1)
+		var wg sync.WaitGroup
+		sem := gosem.NewTimeSemaphore(permit, time.Second)
+		for i := 0; i < workerNumber; i++ {
+			wg.Add(1)
+			sem.Acquire()
 			go func(i int) {
-				task(i)
+				defer wg.Done()
+				time.Sleep(time.Millisecond)
+				log.Printf("Done: task-%v\n", i)
 				sem.Release()
 			}(i)
 		}
-		sem.Wait()
-		ch <- 0
+		wg.Wait()
+		ch <- struct{}{}
+		close(ch)
 	}()
 	return ch
 }
 
 func main() {
 	tick := time.NewTicker(time.Second)
-	ch := getMainCh()
+	ch := task(20, 6)
 Main:
 	for {
 		select {
 		case <-ch:
 			break Main
-		case t := <-tick.C:
-			fmt.Println(t.Unix())
+		case <-tick.C:
+			log.Println("tick")
 		}
 	}
 }

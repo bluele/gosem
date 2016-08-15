@@ -1,7 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"gopkg.in/redis.v3"
@@ -11,48 +12,42 @@ import (
 
 func createSemaphore(permit int) *gosem.RedisSemaphore {
 	return &gosem.RedisSemaphore{
-		Client: redis.NewClient(&redis.Options{Network: "tcp", Addr: "127.0.0.1:6379"}),
-		Option: &gosem.RedisSemaphoreOption{
-			Permit: permit,
-		},
+		Client:  redis.NewClient(&redis.Options{Network: "tcp", Addr: "127.0.0.1:6379", PoolSize: 20}),
+		Permits: permit,
 	}
 }
 
-func task(i int) {
-	time.Sleep(time.Millisecond)
-	fmt.Printf("done: task-%v\n", i)
-}
-
-func getMainCh() chan byte {
-	ch := make(chan byte)
+func task(workerNumber, permit int) chan struct{} {
+	ch := make(chan struct{})
 	go func() {
-		taskNumber := 20
-		permit := 6
+		var wg sync.WaitGroup
 		sem := createSemaphore(permit)
-
-		for i := 0; i < taskNumber; i++ {
-			sem.Aquire(1)
+		sem.Reset()
+		for i := 0; i < workerNumber; i++ {
+			wg.Add(1)
+			av, _ := sem.Available()
+			log.Println("Available: ", av)
+			sem.Acquire()
 			go func(i int) {
-				task(i)
+				defer wg.Done()
+				time.Sleep(time.Millisecond)
+				log.Printf("Done: task-%v\n", i)
 				sem.Release()
 			}(i)
 		}
-		sem.Wait()
-		ch <- 0
+		wg.Wait()
+		ch <- struct{}{}
+		close(ch)
 	}()
 	return ch
 }
 
 func main() {
-	tick := time.NewTicker(time.Second)
-	ch := getMainCh()
-Main:
+	ch := task(20, 6)
 	for {
 		select {
 		case <-ch:
-			break Main
-		case t := <-tick.C:
-			fmt.Println(t.Unix())
+			return
 		}
 	}
 }
