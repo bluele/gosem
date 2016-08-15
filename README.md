@@ -66,6 +66,10 @@ client := redis.NewClient(
   &redis.Options{Network: "tcp", Addr: "127.0.0.1:6379"},
 )
 sem := gosem.NewRedisSemaphore(client, 5)
+// acquire a new resource
+sem.Acquire()
+// release the resource
+sem.Release()
 ```
 
 

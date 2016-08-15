@@ -72,12 +72,12 @@ func (sm *RedisSemaphore) existsOrInit() error {
 	return nil
 }
 
-func (sm *RedisSemaphore) Aquire() error {
-	return sm.AquireWithTimeout(0)
+func (sm *RedisSemaphore) Acquire() error {
+	return sm.AcquireWithTimeout(0)
 }
 
-func (sm *RedisSemaphore) AquireWithTimeout(timeout time.Duration) error {
-	return sm.aquire(func() (string, error) {
+func (sm *RedisSemaphore) AcquireWithTimeout(timeout time.Duration) error {
+	return sm.acquire(func() (string, error) {
 		results, err := sm.Client.BLPop(timeout, sm.AvailableKey()).Result()
 		if err != nil {
 			if err == redis.Nil {
@@ -89,7 +89,7 @@ func (sm *RedisSemaphore) AquireWithTimeout(timeout time.Duration) error {
 	})
 }
 
-func (sm *RedisSemaphore) aquire(getToken func() (string, error)) error {
+func (sm *RedisSemaphore) acquire(getToken func() (string, error)) error {
 	err := sm.existsOrInit()
 	if err != nil {
 		return err
