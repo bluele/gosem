@@ -20,7 +20,7 @@ func TestRedisSemaphore(t *testing.T) {
 	sem := createTestRedisSemaphore(3)
 	permits := sem.Permits
 
-	if err := sem.Aquire(); err != nil {
+	if err := sem.Acquire(); err != nil {
 		t.Error(err)
 		return
 	}
@@ -48,7 +48,7 @@ func TestRedisSemaphoreWithGoroutine(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			child := createTestRedisSemaphore(num)
-			if err := child.Aquire(); err != nil {
+			if err := child.Acquire(); err != nil {
 				panic(err)
 			}
 		}()
