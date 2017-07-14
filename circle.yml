@@ -8,4 +8,4 @@ test:
   override:
     - go test -v
     - go get github.com/mattn/goveralls
-    - goveralls -v -service=circle-ci -repotoken $COVERALLS_TOKEN .
+    - goveralls -v -service=circle-ci -repotoken $COVERALLS_TOKEN -package .
