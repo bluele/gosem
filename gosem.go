@@ -7,15 +7,15 @@ import (
 	"time"
 )
 
-const (
-	resource byte = 0
+var (
+	resource = struct{}{}
 )
 
 // Semaphore is a simple semaphore that can be used to coordinate the number of accessing shared data from multiple goroutine.
 type Semaphore struct {
 	Permits int
 
-	channel chan byte
+	channel chan struct{}
 }
 
 // TimeSemaphore is a semaphore that can be used to coordinate the number of accessing shared data from multiple goroutine with specified time.
@@ -24,19 +24,19 @@ type TimeSemaphore struct {
 	Logger  *log.Logger
 
 	mu        sync.RWMutex
-	channel   chan byte
+	channel   chan struct{}
 	tokenList *list.List
 	buffer    chan *list.Element
 	per       time.Duration
 
-	destroy chan byte
+	destroy chan struct{}
 }
 
 // NewSemaphore returns a new Semaphore object
 func NewSemaphore(permits int) *Semaphore {
 	sm := &Semaphore{
 		Permits: permits,
-		channel: make(chan byte, permits),
+		channel: make(chan struct{}, permits),
 	}
 	for i := 0; i < permits; i++ {
 		sm.channel <- resource
@@ -49,10 +49,10 @@ func NewTimeSemaphore(permits int, per time.Duration) *TimeSemaphore {
 	sm := &TimeSemaphore{
 		Permits:   permits,
 		per:       per,
-		channel:   make(chan byte, permits),
+		channel:   make(chan struct{}, permits),
 		tokenList: list.New(),
 		buffer:    make(chan *list.Element, permits),
-		destroy:   make(chan byte, 1),
+		destroy:   make(chan struct{}, 1),
 	}
 	go sm.gc()
 	return sm
